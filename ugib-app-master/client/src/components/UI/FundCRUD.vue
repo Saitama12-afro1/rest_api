@@ -1,0 +1,245 @@
+<template>
+  <v-card>
+    <v-card-title>
+      <p>
+        Фонд ЦНИГРИ. Сводная таблица оцифрованных объектов учета фондовых
+        материалов (1928-2020гг.)
+      </p>
+      <v-spacer></v-spacer>
+      <v-text-field
+        v-model="search"
+        append-icon="mdi-magnify"
+        label="Поиск по реестру объектов учета ЕБГИ..."
+        single-line
+        hide-details
+      ></v-text-field>
+    </v-card-title>
+    <v-data-table
+      :headers="headers"
+      :items="items"
+      :single-expand="singleExpand"
+      :expanded.sync="expanded"
+      item-key="oid"
+      show-expand
+      fixed-header
+      height="80vh"
+      class="elevation-1"
+      :footer-props="{
+        'items-per-page-options': [50, 100, 200],
+        showFirstLastPage: true,
+        firstIcon: 'mdi-arrow-collapse-left',
+        lastIcon: 'mdi-arrow-collapse-right',
+        prevIcon: 'mdi-minus',
+        nextIcon: 'mdi-plus',
+        'items-per-page-text': 'Объектов на странице: ',
+      }"
+      :items-per-page="50"
+      :search="search"
+      :sort-desc="[false, true]"
+      multi-sort
+      :header-props="{ sortIcon: null, sortByText: 'Сортировать по:' }"
+      :loading="loadTable"
+      loading-text="Загрузка... Подождите"
+    >
+      <template v-slot:expanded-item="{ item }">
+        <td :colspan="headers.length">
+          <div class="wrapper-simple-table" data-app>
+            <v-simple-table>
+              <template v-slot:default>
+                <thead>
+                  <tr>
+                    <th>Вид объекта учета</th>
+                    <th>
+                      Сведения о наличии ограничений оборота передаваемых данных
+                    </th>
+                    <th>Права на материалы объекта</th>
+                    <th>
+                      Наименование регламентирующего документа (наименование
+                      работ)
+                    </th>
+                    <th>
+                      Геологические объекты, ассоциируемые с объектом учета
+                    </th>
+                    <th>Полезные ископаемые попутные</th>
+                    <th>Группа полезных ископаемых</th>
+                    <th>Местоположение</th>
+                    <th>Номенклатуры листов НД</th>
+                    <th>Дополнительные сведения о местоположении</th>
+                    <th>Тип информации</th>
+                    <th>Государственная регистрация</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{{ item.obj_type }}</td>
+                    <td>{{ item.obj_restrict }}</td>
+                    <td>{{ item.obj_rights }}</td>
+                    <td>{{ item.obj_rdoc_name }}</td>
+                    <td>{{ item.obj_assoc_geol }}</td>
+                    <td>{{ item.obj_supl_min }}</td>
+                    <td>{{ item.obj_group_min }}</td>
+                    <td>{{ item.spat_loc }}</td>
+                    <td>{{ item.spat_num_grid }}</td>
+                    <td>{{ item.spat_toponim }}</td>
+                    <td>{{ item.inf_type }}</td>
+                    <td>{{ item.path_others }}</td>
+                  </tr>
+                </tbody>
+              </template>
+            </v-simple-table>
+          </div>
+        </td>
+      </template>
+      <template v-slot:[`item.path_cloud`]="{ value }">
+        <v-btn class="mx-1" fab x-small @click="onButtonClickCloud(value)">
+          <v-icon dark>mdi-application-import</v-icon>
+        </v-btn>
+      </template>
+      <template v-slot:[`item.oid`]="{ value }">
+        <v-btn class="mx-1" fab x-small @click="onButtonClick(value)">
+          <v-icon dark>mdi-map-search-outline</v-icon>
+        </v-btn>
+      </template>
+      <template v-slot:[`item.actions`]="{ item }">
+        <v-icon small class="mr-2" @click="editItem(item)">
+          mdi-pencil
+        </v-icon>
+        <v-icon small @click="deleteItem(item)">
+          mdi-delete
+        </v-icon>
+      </template>
+      <template v-slot:no-data>
+        <v-btn color="primary" @click="initialize">
+          Reset
+        </v-btn>
+      </template>
+    </v-data-table>
+  </v-card>
+</template>
+
+<script>
+import axios from "axios";
+import { mapGetters } from "vuex";
+
+export default {
+  name: "FundCRUD",
+  data() {
+    return {
+      expanded: [],
+      singleExpand: false,
+      loadTable: true,
+      value: "",
+      options: {},
+      search: "",
+      headers: [
+        { text: "Показать на карте", value: "oid", sortable: false },
+        {
+          text: "Перейти к материалам",
+          value: "path_cloud",
+          width: "100",
+          sortable: false,
+        },
+        { text: "Директория хранения", value: "stor_folder", width: "130" },
+        { text: "Название объекта", value: "obj_name", width: "280" },
+        { text: "Автор (авторы)", value: "obj_authors", width: "150" },
+        { text: "Год составления объекта", value: "obj_year", width: "80" },
+        {
+          text: "Инвентарные номера в каталогах учета",
+          value: "obj_assoc_inv_nums",
+          width: "150",
+        },
+        {
+          text: "Полезные ископаемые основные",
+          value: "obj_main_min",
+          width: "120",
+        },
+        { text: "Вид работ", value: "type_of_work", width: "100" },
+        { text: "Организации", value: "obj_orgs", width: "100" },
+        {
+          text: "Сведения о привязке в рамках АТД и АТЕ",
+          value: "spat_atd_ate",
+        },
+        {
+          text: "Ключевые слова",
+          value: "obj_terms",
+          width: "230",
+        },
+      ],
+      items: [],
+    };
+  },
+  computed: {
+    ...mapGetters(["text"]),
+  },
+  created() {
+    // if (localStorage.getItem("token") === null) {
+    //   this.$router.push("/login");
+    // }
+    axios
+      .get("http://localhost:3000/api/json")
+      .then((res) => {
+        console.log(res.data);
+        this.items = res.data;
+        this.loadTable = true;
+      })
+      .catch((error) => {
+        console.log(error.response);
+      });
+  },
+  mounted() {
+    console.log("Get text >>> " + this.text + " <<<");
+    this.search = this.text;
+  },
+  methods: {
+    onButtonClickCloud(value) {
+      window.open(value, "_blank");
+    },
+    onButtonClick(value) {
+      this.value = "";
+      localStorage.setItem("reportValue", value);
+      this.$router.push("/map");
+      console.log("click on " + value + " item");
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+input,
+textarea,
+select,
+button {
+  border: 0px !important;
+}
+td {
+  text-align: center !important;
+}
+.wrapper-table {
+  margin: 30px 0px 0px 15%;
+}
+.wrapper-simple-table {
+  margin: 20px;
+}
+.v-select__slot {
+  height: 25px;
+}
+.v-text-field__slot {
+  padding-top: 30px;
+  height: 30px;
+}
+.text-center {
+  text-align: left;
+  margin-left: 10px;
+}
+.expanded-btn {
+  display: flex;
+  justify-content: center;
+  margin: 20px;
+}
+.ma-2 {
+  margin: -20px 20px 20px 0px;
+}
+//.v-data-table-header th {
+//  white-space: nowrap;
+//}
+</style>

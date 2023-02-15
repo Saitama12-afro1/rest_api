@@ -1,0 +1,51 @@
+stages:
+  - client
+  - server
+  - deploy
+
+# build stage
+build_app:
+  image: node:16.13.0-stretch
+  stage: client
+  only:
+    - master
+  before_script:
+    - cd client
+  script:
+    - npm install -g @vue/cli@latest
+    - npm install
+    - npm run build
+  cache:
+    paths:
+      - node_modules/
+  artifacts:
+    paths:
+      # build folder
+      - client/dist/
+    expire_in: 1 hour
+
+build_server:
+  image: node:16.13.0-stretch
+  stage: server
+  only:
+    - master
+  before_script:
+    - cd server
+  script:
+    - npm install
+    # - npm rebuild bcrypt --build-from-source
+  cache:
+    paths:
+      - node_modules/
+
+# production stage
+production:
+  stage: deploy
+  before_script:
+    - mkdir -p ~/.ssh
+    - echo -e "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+  script:
+    - scp -r dist/* root@kastor:/var/www/ugib_bkp/test/
+    - systemctl restart npmexp.service
